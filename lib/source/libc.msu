@@ -1,0 +1,4 @@
+memset 0
+memcpy 0
+__aeabi_lmul 16
+default_CSPRNG  512

@@ -59,11 +59,16 @@
 #include <tinycrypt/ecc_dh.h>
 #include <string.h>
 
+#ifdef NO_PTR_CALL
+#include <tinycrypt/ecc_platform_specific.h>
+#define g_rng_function default_CSPRNG
+#else
 #if default_RNG_defined
 static uECC_RNG_Function g_rng_function = &default_CSPRNG;
 #else
 static uECC_RNG_Function g_rng_function = 0;
 #endif
+#endif /* NO_PTR_CALL */
 
 int uECC_make_key_with_d(uint8_t *public_key, uint8_t *private_key,
 			 unsigned int *d, uECC_Curve curve)
@@ -109,9 +114,14 @@ int uECC_make_key(uint8_t *public_key, uint8_t *private_key, uECC_Curve curve)
 
 	for (tries = 0; tries < uECC_RNG_MAX_TRIES; ++tries) {
 		/* Generating _private uniformly at random: */
+#ifndef NO_PTR_CALL
 		uECC_RNG_Function rng_function = uECC_get_rng();
 		if (!rng_function ||
-			!rng_function((uint8_t *)_random, 2 * NUM_ECC_WORDS*uECC_WORD_SIZE)) {
+			!rng_function((uint8_t *)_random, 2 * NUM_ECC_WORDS*uECC_WORD_SIZE))
+#else
+		if (!g_rng_function((uint8_t *)_random, 2 * NUM_ECC_WORDS*uECC_WORD_SIZE))
+#endif
+		{
         		return 0;
 		}
 
@@ -173,7 +183,10 @@ int uECC_shared_secret(const uint8_t *public_key, const uint8_t *private_key,
 
 	/* If an RNG function was specified, try to get a random initial Z value to
 	 * improve protection against side-channel attacks. */
-	if (g_rng_function) {
+#ifndef NO_PTR_CALL
+	if (g_rng_function)
+#endif
+	{
 		if (!uECC_generate_random_int(p2[carry], curve->p, num_words)) {
 			r = 0;
 			goto clear_and_out;

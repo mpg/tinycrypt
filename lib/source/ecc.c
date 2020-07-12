@@ -56,6 +56,9 @@
 #include <tinycrypt/ecc_platform_specific.h>
 #include <string.h>
 
+#ifdef NO_PTR_CALL
+#define g_rng_function default_CSPRNG
+#else
 /* IMPORTANT: Make sure a cryptographically-secure PRNG is set and the platform
  * has access to enough entropy in order to feed the PRNG regularly. */
 #if default_RNG_defined
@@ -73,6 +76,7 @@ uECC_RNG_Function uECC_get_rng(void)
 {
 	return g_rng_function;
 }
+#endif /* NO_PTR_CALL */
 
 int uECC_curve_private_key_size(uECC_Curve curve)
 {
@@ -376,7 +380,11 @@ void uECC_vli_modMult_fast(uECC_word_t *result, const uECC_word_t *left,
 	uECC_word_t product[2 * NUM_ECC_WORDS];
 	uECC_vli_mult(product, left, right, curve->num_words);
 
+#ifndef NO_PTR_CALL
 	curve->mmod_fast(result, product);
+#else
+	vli_mmod_fast_secp256r1(result, product);
+#endif
 }
 
 static void uECC_vli_modSquare_fast(uECC_word_t *result,
@@ -654,7 +662,11 @@ static void XYcZ_initial_double(uECC_word_t * X1, uECC_word_t * Y1,
 	uECC_vli_set(Y2, Y1, num_words);
 
 	apply_z(X1, Y1, z, curve);
+#ifndef NO_PTR_CALL
 	curve->double_jacobian(X1, Y1, z, curve);
+#else
+	double_jacobian_default(X1, Y1, z, curve);
+#endif
 	apply_z(X2, Y2, z, curve);
 }
 
@@ -841,9 +853,11 @@ int uECC_generate_random_int(uECC_word_t *random, const uECC_word_t *top,
 	uECC_word_t tries;
 	bitcount_t num_bits = uECC_vli_numBits(top, num_words);
 
+#ifndef NO_PTR_CALL
 	if (!g_rng_function) {
 		return 0;
 	}
+#endif
 
 	for (tries = 0; tries < uECC_RNG_MAX_TRIES; ++tries) {
 		if (!g_rng_function((uint8_t *)random, num_words * uECC_WORD_SIZE)) {
@@ -878,7 +892,11 @@ int uECC_valid_point(const uECC_word_t *point, uECC_Curve curve)
 	}
 
 	uECC_vli_modSquare_fast(tmp1, point + num_words, curve);
+#ifndef NO_PTR_CALL
 	curve->x_side(tmp2, point, curve); /* tmp2 = x^3 + ax + b */
+#else
+	x_side_default(tmp2, point, curve); /* tmp2 = x^3 + ax + b */
+#endif
 
 	/* Make sure that y^2 == x^3 + ax + b */
 	if (uECC_vli_equal(tmp1, tmp2, num_words) != 0)

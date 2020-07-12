@@ -57,11 +57,16 @@
 #include <tinycrypt/ecc.h>
 #include <tinycrypt/ecc_dsa.h>
 
+#ifdef NO_PTR_CALL
+#include <tinycrypt/ecc_platform_specific.h>
+#define g_rng_function default_CSPRNG
+#else
 #if default_RNG_defined
 static uECC_RNG_Function g_rng_function = &default_CSPRNG;
 #else
 static uECC_RNG_Function g_rng_function = 0;
 #endif
+#endif /* NO_PTR_CALL */
 
 static void bits2int(uECC_word_t *native, const uint8_t *bits,
 		     unsigned bits_size, uECC_Curve curve)
@@ -124,11 +129,15 @@ int uECC_sign_with_k(const uint8_t *private_key, const uint8_t *message_hash,
 
 	/* If an RNG function was specified, get a random number
 	to prevent side channel analysis of k. */
-	if (!g_rng_function) {
+#ifndef NO_PTR_CALL
+	if (!g_rng_function)
+        {
 		uECC_vli_clear(tmp, num_n_words);
 		tmp[0] = 1;
 	}
-	else if (!uECC_generate_random_int(tmp, curve->n, num_n_words)) {
+	else
+#endif
+	if (!uECC_generate_random_int(tmp, curve->n, num_n_words)) {
 		return 0;
 	}
 
@@ -167,9 +176,14 @@ int uECC_sign(const uint8_t *private_key, const uint8_t *message_hash,
 
 	for (tries = 0; tries < uECC_RNG_MAX_TRIES; ++tries) {
 		/* Generating _random uniformly at random: */
+#ifndef NO_PTR_CALL
 		uECC_RNG_Function rng_function = uECC_get_rng();
 		if (!rng_function ||
-		    !rng_function((uint8_t *)_random, 2*NUM_ECC_WORDS*uECC_WORD_SIZE)) {
+		    !rng_function((uint8_t *)_random, 2*NUM_ECC_WORDS*uECC_WORD_SIZE))
+#else
+		if (!g_rng_function((uint8_t *)_random, 2*NUM_ECC_WORDS*uECC_WORD_SIZE))
+#endif
+		{
 			return 0;
 		}
 
@@ -267,7 +281,11 @@ int uECC_verify(const uint8_t *public_key, const uint8_t *message_hash,
 
 	for (i = num_bits - 2; i >= 0; --i) {
 		uECC_word_t index;
+#ifndef NO_PTR_CALL
 		curve->double_jacobian(rx, ry, z, curve);
+#else
+		double_jacobian_default(rx, ry, z, curve);
+#endif
 
 		index = (!!uECC_vli_testBit(u1, i)) | ((!!uECC_vli_testBit(u2, i)) << 1);
 		point = points[index];
